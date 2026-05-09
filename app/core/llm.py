@@ -78,8 +78,8 @@ class LLM_OPTIONS(str, Enum):
     MERCURY_2_REASONING_HIGH               = "mercury-2:reasoning-high"
 
     # ── MiniMax ──────────────────────────────────────────────────
-    MINIMAX_2_7 = "MiniMax-2.7"
-    MINIMAX_2_5 = "MiniMax-2.5"
+    MINIMAX_2_7 = "MiniMax-M2.7"
+    MINIMAX_2_5 = "MiniMax-M2.5"
 
     @property
     def base_model(self) -> str:

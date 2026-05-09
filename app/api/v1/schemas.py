@@ -1,4 +1,5 @@
 from pydantic import BaseModel, Field, field_validator
+from app.core.config import settings
 from app.core.llm import LLM_OPTIONS
 
 
@@ -15,15 +16,15 @@ class AnalyseRequest(BaseModel):
         description="Optional thread ID to resume an existing conversation.",
     )
     orchestrator_model: LLM_OPTIONS | None = Field(
-        default=None,
+        default=LLM_OPTIONS(settings.default_orchestrator_model),
         description="Model to use for the orchestrator agent.",
     )
     researcher_model: LLM_OPTIONS | None = Field(
-        default=None,
+        default=LLM_OPTIONS(settings.default_researcher_model),
         description="Model to use for the website-researcher subagent.",
     )
     writer_model: LLM_OPTIONS | None = Field(
-        default=None,
+        default=LLM_OPTIONS(settings.default_writer_model),
         description="Model to use for the brief-writer subagent.",
     )
 

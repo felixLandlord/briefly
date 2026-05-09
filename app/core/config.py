@@ -11,9 +11,9 @@ class Settings(BaseSettings):
     output_dir: Path = Field(default=Path("outputs"), alias="OUTPUT_DIR")
 
     # Default Models
-    default_orchestrator_model: str = Field(default="MiniMax-2.7", alias="DEFAULT_ORCHESTRATOR_MODEL")
-    default_researcher_model: str = Field(default="MiniMax-2.7", alias="DEFAULT_RESEARCHER_MODEL")
-    default_writer_model: str = Field(default="MiniMax-2.7", alias="DEFAULT_WRITER_MODEL")
+    default_orchestrator_model: str = Field(default="MiniMax-M2.7", alias="DEFAULT_ORCHESTRATOR_MODEL")
+    default_researcher_model: str = Field(default="MiniMax-M2.7", alias="DEFAULT_RESEARCHER_MODEL")
+    default_writer_model: str = Field(default="MiniMax-M2.7", alias="DEFAULT_WRITER_MODEL")
 
     # CORS / server
     cors_origins: list[str] = Field(default=["http://localhost:3000", "http://localhost:5173"])
@@ -22,7 +22,7 @@ class Settings(BaseSettings):
 
     # MiniMax
     minimax_api_key: str = Field(default="", alias="MINIMAX_API_KEY")
-    minimax_api_host: str = Field(default="https://api.minimax.io", alias="MINIMAX_API_HOST")
+    minimax_api_host: str = Field(default="https://api.minimax.io/v1", alias="MINIMAX_API_HOST")
 
     # Anthropic
     anthropic_api_key: str = Field(default="", alias="ANTHROPIC_API_KEY")
