@@ -17,7 +17,8 @@ async def log_tool_calls(request: object, handler: object) -> object:
     tool_name: str = tool_call.get("name", "unknown")
     tool_args: dict = tool_call.get("args", {})
 
-    config: dict = getattr(request, "config", {})
+    runtime = getattr(request, "runtime", None)
+    config: dict = getattr(runtime, "config", {}) if runtime else getattr(request, "config", {})
     agent_name: str = config.get("metadata", {}).get("lc_agent_name", "main-agent")
 
     logger.info(

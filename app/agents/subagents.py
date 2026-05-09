@@ -3,6 +3,7 @@ Dict-based subagent specs following the DeepAgents SubAgent schema.
 These are plain dicts so they're easy to inspect, test, and patch.
 """
 from typing import Any
+from datetime import datetime
 from langchain_core.language_models import BaseChatModel
 
 from app.agents.tools import save_brief
@@ -10,14 +11,16 @@ from app.agents.prompts import (
     BRIEF_WRITER_SYSTEM_PROMPT,
     WEBSITE_RESEARCHER_SYSTEM_PROMPT,
 )
+from app.core.middleware import log_tool_calls
 
 
 def get_subagents(
     researcher_llm: BaseChatModel,
     writer_llm: BaseChatModel,
+    research_tools: list[Any] = None,
 ) -> list[dict[str, Any]]:
     """
-    Return a list of subagent specifications with the provided LLMs.
+    Return a list of subagent specifications with the provided LLMs and tools.
     """
     
     website_researcher: dict[str, Any] = {
@@ -28,7 +31,8 @@ def get_subagents(
         ),
         "system_prompt": WEBSITE_RESEARCHER_SYSTEM_PROMPT,
         "model": researcher_llm,
-        # Inherits both search tools from the orchestrator
+        "tools": research_tools or [],
+        "middleware": [log_tool_calls],
     }
 
     brief_writer: dict[str, Any] = {
@@ -38,9 +42,10 @@ def get_subagents(
             "Markdown competitive brief and saves it to disk. Pass the full research "
             "result from the website-researcher."
         ),
-        "system_prompt": BRIEF_WRITER_SYSTEM_PROMPT,
+        "system_prompt": BRIEF_WRITER_SYSTEM_PROMPT.format(current_date=datetime.now().strftime("%B %d, %Y")),
         "tools": [save_brief],
         "model": writer_llm,
+        "middleware": [log_tool_calls],
     }
 
     return [website_researcher, brief_writer]

@@ -10,11 +10,10 @@ def build_mcp_config() -> dict:
     return {
         "minimax-mcp-server": {
             "command": "uvx",
-            # "args": ["--quiet", "--no-progress", "minimax-coding-plan-mcp", "-y"],
-            "args": ["minimax-coding-plan-mcp", "-y"],
+            "args": ["--quiet", "--no-progress", "minimax-coding-plan-mcp", "-y"],
             "env": {
                 "MINIMAX_API_KEY": settings.minimax_api_key,
-                "MINIMAX_API_HOST": settings.minimax_api_host,
+                "MINIMAX_API_HOST": settings.minimax_api_host.removesuffix("/v1"),
             },
             "transport": "stdio",
         }

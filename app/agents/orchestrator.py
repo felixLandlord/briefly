@@ -30,12 +30,6 @@ async def create_orchestrator(
     res_llm = _build_llm(researcher_model)
     wri_llm = _build_llm(writer_model)
 
-    # 2. Resolve subagents with their specific LLMs
-    subagents = get_subagents(
-        researcher_llm=res_llm,
-        writer_llm=wri_llm,
-    )
-
     logger.info(
         "orchestrator.creating",
         orchestrator_model=orchestrator_model.base_model,
@@ -43,20 +37,27 @@ async def create_orchestrator(
         writer_model=writer_model.base_model,
     )
 
-    # 3. Resolve tools (MCP tools are async)
+    # 2. Resolve tools (MCP tools are async)
     mcp_tools = await get_mcp_tools()
     
-    # 4. Select search provider: MiniMax models use MCP tools, others use Tavily
-    all_tools = list(mcp_tools)
+    # 3. Select search provider: MiniMax models use MCP tools, others use Tavily
+    research_tools = list(mcp_tools)
     if not researcher_model.is_minimax:
-        all_tools.append(tavily_search)
+        research_tools.append(tavily_search)
+
+    # 4. Resolve subagents with their specific LLMs and tools
+    subagents = get_subagents(
+        researcher_llm=res_llm,
+        writer_llm=wri_llm,
+        research_tools=research_tools,
+    )
 
     # 5. Create the deep agent
     agent = create_deep_agent(
         model=orc_llm,
         system_prompt=ORCHESTRATOR_SYSTEM_PROMPT,
         subagents=subagents,
-        tools=all_tools,
+        tools=[],  # Orchestrator should only have subagents, no direct tools
         middleware=[log_tool_calls],
         name="orchestrator",
     )

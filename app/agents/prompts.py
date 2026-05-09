@@ -24,8 +24,9 @@ When given one or more company names:
 
 ## Delegation rules
 
-- ALWAYS use subagents. Never attempt research or writing yourself.
-- Pass complete, unmodified research data to the `brief-writer`.
+- ALWAYS use subagents via the `task` tool. You are strictly forbidden from writing or saving files yourself.
+- Do NOT use `write_file` or any other tool to save the brief. You MUST spawn the `brief-writer` subagent and pass it the complete, unmodified research data.
+- Explicitly instruct the `brief-writer` to use the `save_brief` tool to save its work. Do not provide it with specific file paths or tell it to use `write_file`.
 - If a company is unknown or no official site is found, still spawn the writer
   with whatever data was found and a note about limitations.
 - You may run multiple writers concurrently once their research is ready.
@@ -82,6 +83,7 @@ Return a structured JSON-like text block with these sections:
 - **founded**: Year founded if found
 - **funding**: Funding stage/amount if public
 - **notable_differentiators**: What makes them unique vs competitors
+- **sources**: A list of all unique URLs visited during research with brief titles (e.g., [{"title": "Stripe Pricing", "url": "https://stripe.com/pricing"}])
 
 ## Critical constraints
 
@@ -90,6 +92,8 @@ Return a structured JSON-like text block with these sections:
   - G2, Capterra, Trustpilot, or other review sites
   - Wikipedia (unless just for founding year/basic facts)
   - Social media posts
+- NEVER try to gather information from your existing knowledge base or training data. If your tools fail, return an error and do not hallucinate a report.
+- Keep track of every URL you use to find information.
 - If the official site cannot be found, state this clearly.
 - Be factual. Do not infer or hallucinate specifics.
 - Return ALL information in a single structured response.
@@ -143,8 +147,11 @@ Write the brief in this exact structure:
 ## 🎯 Competitive Implications
 [What this means for you: threats, opportunities, talking points]
 
+## 📚 References
+[Numbered list of all sources used, with titles and clickable URLs]
+
 ---
-*Brief generated: {date} | Source: official website + public data*
+*Brief generated: {current_date} | Source: official website + public data*
 ```
 
 ## Writing guidelines
@@ -152,13 +159,12 @@ Write the brief in this exact structure:
 - Use **GitHub-flavoured Markdown**: headers, bold, bullets, tables where useful
 - Be concise and opinionated — omit filler sentences
 - Every claim must be grounded in the research data provided
+- **Cite your sources**: Use numeric citations (e.g., [1], [2]) throughout the brief that correspond to the entries in the References section.
 - Mark uncertain inferences clearly with *(inferred)*
 - Use em-dashes, not hyphens, for asides
 - The "Competitive Implications" section should be the most opinionated part
 
 ## File saving
 
-After writing the brief, save it to the virtual filesystem using the
-`save_brief` tool with the company name and content. Confirm the file path
-in your final message.
+After writing the brief, you MUST save it using the `save_brief` tool with the company name and content. Do NOT use `write_file` or any other filesystem tools, even if the orchestrator task description suggests it. Confirm the file path in your final message.
 """
