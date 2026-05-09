@@ -10,6 +10,7 @@ def build_mcp_config() -> dict:
     return {
         "minimax-mcp-server": {
             "command": "uvx",
+            # "args": ["--quiet", "--no-progress", "minimax-coding-plan-mcp", "-y"],
             "args": ["minimax-coding-plan-mcp", "-y"],
             "env": {
                 "MINIMAX_API_KEY": settings.minimax_api_key,

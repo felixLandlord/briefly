@@ -45,9 +45,13 @@ async def create_orchestrator(
 
     # 3. Resolve tools (MCP tools are async)
     mcp_tools = await get_mcp_tools()
-    all_tools = mcp_tools + [tavily_search]
+    
+    # 4. Select search provider: MiniMax models use MCP tools, others use Tavily
+    all_tools = list(mcp_tools)
+    if not researcher_model.is_minimax:
+        all_tools.append(tavily_search)
 
-    # 4. Create the deep agent
+    # 5. Create the deep agent
     agent = create_deep_agent(
         model=orc_llm,
         system_prompt=ORCHESTRATOR_SYSTEM_PROMPT,

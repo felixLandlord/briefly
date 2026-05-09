@@ -54,7 +54,7 @@ Given a company name, find and extract structured information from:
 ## Research methodology
 
 You have access to two search tools. Follow this logic to choose the right one:
-- If you are a **MiniMax** model: Use the `mcp_search` tool (provided via MCP).
+- If you are a **MiniMax** model: Use the `web_search` tool (provided via MCP).
 - If you are **any other** model (Claude, GPT, etc.): Use the `tavily_search` tool.
 
 1. First use the appropriate search tool to find the official company website.
