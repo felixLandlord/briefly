@@ -207,6 +207,8 @@ outputs/
     brex-7d4e1a09.md
 ```
 
+> Sample outputs can be found in the [`outputs/`](outputs) folder.
+
 ![Generated Brief](screenshots/brief1.png)
 
 Each brief follows this structure:
