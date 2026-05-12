@@ -3,6 +3,7 @@ import { useCallback, useRef, useState, useEffect } from "react";
 export type TokenEvent = {
   type: "token";
   source: "main" | "subagent";
+  agent_name?: string;
   content: string;
   ns: string[];
 };
@@ -10,8 +11,10 @@ export type TokenEvent = {
 export type UpdateEvent = {
   type: "update";
   source: "main" | "subagent";
+  agent_name?: string;
   node: string;
   ns: string[];
+  tool_calls?: Array<{ name: string; args: any }>;
 };
 
 export type EndEvent = {
@@ -21,9 +24,20 @@ export type EndEvent = {
   briefs: Array<{ company: string; path: string; filename: string }>;
 };
 
-export type ErrorEvent = { type: "error"; error: string };
+export type CustomEvent = {
+  type: "custom";
+  source: "main" | "subagent";
+  agent_name?: string;
+  data: any;
+  ns: string[];
+};
 
-export type StreamEvent = TokenEvent | UpdateEvent | EndEvent | ErrorEvent;
+export type ErrorEvent = {
+  type: "error";
+  error: string;
+};
+
+export type StreamEvent = TokenEvent | UpdateEvent | EndEvent | ErrorEvent | CustomEvent;
 
 export interface UseStreamReturn {
   events: StreamEvent[];
@@ -112,35 +126,51 @@ export function useStream(): UseStreamReturn {
 
         while (true) {
           const { done, value } = await reader.read();
-          if (done) break;
-          buffer += decoder.decode(value, { stream: true });
+          
+          if (value) {
+            buffer += decoder.decode(value, { stream: true });
+            const frames = buffer.split("\n\n");
+            buffer = frames.pop() ?? "";
 
-          const frames = buffer.split("\n\n");
-          buffer = frames.pop() ?? "";
-
-          for (const frame of frames) {
-            if (!frame.trim()) continue;
-            const eventLine = frame.match(/^event: (.+)$/m)?.[1];
-            const dataLine = frame.match(/^data: (.+)$/m)?.[1];
-            if (!eventLine || !dataLine) continue;
-
-            try {
-              const parsed = JSON.parse(dataLine.replace(/\\n/g, "\n"));
-              const evt: StreamEvent = { type: eventLine as StreamEvent["type"], ...parsed };
-              
-              eventBufferRef.current.push(evt);
-
-              if (eventLine === "end" || eventLine === "error") {
-                // Final flush will happen in the loop or after
-              }
-            } catch {
-              // ignore parse errors
+            for (const frame of frames) {
+              if (!frame.trim()) continue;
+              processFrame(frame);
             }
+          }
+
+          if (done) {
+            // Process any remaining data in buffer as a final frame
+            if (buffer.trim()) {
+              processFrame(buffer);
+            }
+            break;
+          }
+        }
+
+        function processFrame(frame: string) {
+          const eventLine = frame.match(/^event: (.+)$/m)?.[1];
+          const dataLine = frame.match(/^data: (.+)$/m)?.[1];
+          if (!eventLine || !dataLine) return;
+
+          try {
+            // NOTE: We don't need to replace \\n with \n here, 
+            // JSON.parse handles escaped newlines within strings.
+            const parsed = JSON.parse(dataLine);
+            const evt: StreamEvent = { type: eventLine as StreamEvent["type"], ...parsed };
+            
+            eventBufferRef.current.push(evt);
+
+            if (eventLine === "end") {
+              console.log("[useStream] Received end event:", parsed);
+            }
+          } catch (err) {
+            console.error("[useStream] Failed to parse frame:", frame, err);
           }
         }
       } catch (err: unknown) {
         if ((err as Error).name !== "AbortError") {
           const msg = err instanceof Error ? err.message : String(err);
+          console.error("[useStream] Stream error:", msg);
           setError(msg);
           eventBufferRef.current.push({ type: "error", error: msg });
         }
@@ -152,10 +182,16 @@ export function useStream(): UseStreamReturn {
             cancelAnimationFrame(rafRef.current);
             rafRef.current = null;
           }
-        }, 100);
+          // Final flush
+          if (eventBufferRef.current.length > 0) {
+            const newEvents = [...eventBufferRef.current];
+            eventBufferRef.current = [];
+            setEvents((prev) => [...prev, ...newEvents]);
+          }
+        }, 150);
       }
     })();
-  }, [reset, flushBuffer]);
+  }, [reset]); // Removed flushBuffer from dependencies to avoid unnecessary resets
 
   return { events, isLoading, error, activeAgentNs, run, reset };
 }

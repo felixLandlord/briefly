@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from app.agents.orchestrator import create_orchestrator
 from app.api.v1.schemas import AnalyseRequest, HealthResponse
-from app.core.repository import output_repository
+from app.core.repository import output_repository, _slugify
 from app.core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -39,32 +39,75 @@ def _chunk_to_sse(chunk: dict) -> str | None:
     ns: tuple = chunk.get("ns", ())
     data: object = chunk.get("data", {})
 
+    # Extract agent name from namespace if possible
+    # ns typically looks like ('orchestrator',) or ('orchestrator', 'tools:website-researcher', ...)
+    agent_name = "orchestrator"
+    for part in reversed(ns):
+        s_part = str(part)
+        if s_part.startswith("tools:"):
+            agent_name = s_part.replace("tools:", "")
+            break
+        elif s_part != "orchestrator" and ":" not in s_part:
+            # This might be a subagent name without the tools: prefix
+            agent_name = s_part
+            break
+
     is_subagent = any(str(s).startswith("tools:") for s in ns)
     source = "subagent" if is_subagent else "main"
 
     if chunk_type == "messages":
         token, _meta = data  # type: ignore[misc]
-        content = getattr(token, "content", "")
+        raw_content = getattr(token, "content", "")
+        if isinstance(raw_content, dict):
+            content = raw_content.get("text", "") or raw_content.get("content", "")
+        else:
+            content = str(raw_content) if raw_content else ""
         if not content:
             return None
-        payload = json.dumps({"source": source, "content": content, "ns": list(ns)})
+        payload = json.dumps(
+            {"source": source, "agent_name": agent_name, "content": content, "ns": list(ns)}
+        )
         return _sse_line("token", payload)
 
     elif chunk_type == "updates":
         node_updates: dict = data  # type: ignore[assignment]
         for node_name in node_updates:
             if node_name in ("model_request", "tools"):
+                tool_calls = []
+                if node_name == "tools":
+                    # Try to extract tool names from the update data
+                    # In LangGraph/DeepAgents, 'tools' node update often contains messages with tool_calls
+                    node_data = node_updates.get(node_name, {})
+                    if isinstance(node_data, dict):
+                        msgs = node_data.get("messages", [])
+                        for msg in msgs:
+                            if hasattr(msg, "tool_calls"):
+                                for tc in msg.tool_calls:
+                                    tool_calls.append({
+                                        "name": tc.get("name"),
+                                        "args": tc.get("args")
+                                    })
+
                 payload = json.dumps(
-                    {"source": source, "node": node_name, "ns": list(ns)}
+                    {
+                        "source": source,
+                        "agent_name": agent_name,
+                        "node": node_name,
+                        "ns": list(ns),
+                        "tool_calls": tool_calls
+                    }
                 )
                 return _sse_line("update", payload)
         return None
 
     elif chunk_type == "custom":
-        payload = json.dumps({"source": source, "data": data, "ns": list(ns)})
+        payload = json.dumps(
+            {"source": source, "agent_name": agent_name, "data": data, "ns": list(ns)}
+        )
         return _sse_line("custom", payload)
 
     return None
+
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -124,6 +167,20 @@ async def analyse(request: AnalyseRequest) -> StreamingResponse:
             briefs = []
             for company in request.companies:
                 paths = await output_repository.list_briefs(company)
+                if not paths:
+                    # Fallback: search all briefs and see if any were created in the last 2 minutes
+                    # that might match the company name
+                    all_paths = await output_repository.list_briefs(None)
+                    # This is a bit fuzzy but helps if the slug changed slightly
+                    from datetime import datetime, timedelta
+                    import os
+                    now = datetime.now()
+                    for p in all_paths:
+                        if (now - datetime.fromtimestamp(os.path.getmtime(p))).total_seconds() < 120:
+                             if company.lower() in p.name.lower():
+                                 paths.append(p)
+                                 break
+
                 for p in paths[:1]:  # most recent
                     briefs.append(
                         {
@@ -141,7 +198,7 @@ async def analyse(request: AnalyseRequest) -> StreamingResponse:
                 }
             )
             yield _sse_line("end", end_payload)
-            log.info("analysis.completed", brief_count=len(briefs))
+            log.info("analysis.completed", brief_count=len(briefs), briefs=[b["filename"] for b in briefs])
 
         except Exception as exc:
             log.exception("analysis.error", error=str(exc))
@@ -178,20 +235,28 @@ async def list_briefs(company: str | None = None) -> list[dict]:
 async def get_brief(company: str, filename: str | None = None) -> dict:
     """Return a brief for a company, optionally a specific filename."""
     logger.info("get_brief_requested", company=company, filename=filename)
-    paths = await output_repository.list_briefs(company)
-    if not paths:
-        raise HTTPException(status_code=404, detail=f"No briefs found for '{company}'")
 
-    selected_path = paths[0]
+    paths = await output_repository.list_briefs(company)
+    selected_path = None
+
     if filename:
-        for p in paths:
-            if p.name == filename:
-                selected_path = p
-                break
-        else:
-            raise HTTPException(
-                status_code=404, detail=f"Brief '{filename}' not found for '{company}'"
-            )
+        if paths:
+            for p in paths:
+                if p.name == filename:
+                    selected_path = p
+                    break
+        if not selected_path:
+            slug = _slugify(company)
+            fallback_path = output_repository.output_dir / slug / filename
+            if fallback_path.exists():
+                selected_path = fallback_path
+                logger.info("get_brief_fallback_path", path=str(fallback_path))
+
+    if not selected_path and paths:
+        selected_path = paths[0]
+
+    if not selected_path:
+        raise HTTPException(status_code=404, detail=f"No brief found for '{company}'")
 
     content = await output_repository.read_brief(selected_path)
     return {

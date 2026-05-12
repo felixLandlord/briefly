@@ -83,7 +83,7 @@ export default function HistoryView() {
         <div className="activity-header">
           <span className="activity-title">Brief Library</span>
         </div>
-        <div style={{ overflowY: 'auto', flex: 1, padding: '8px 0' }}>
+        <div style={{ overflowY: 'auto', flex: 1, minHeight: 0, padding: '8px 0' }}>
           {Object.entries(groupedBriefs).length === 0 ? (
             <div style={{ padding: '24px', color: 'var(--text-3)', fontSize: '13px' }}>
               No briefs found yet.

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useStream } from './hooks/useStream';
 import StreamWorkspace from './components/StreamWorkspace';
 import HistoryView from './components/HistoryView';
@@ -101,7 +101,7 @@ export default function App() {
             )}
 
             {(phase === 'running' || phase === 'done') && (
-              <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
                 <div style={{ 
                   height: '64px', 
                   display: 'flex', 
