@@ -162,6 +162,7 @@ async def analyse(request: AnalyseRequest) -> StreamingResponse:
 @router.get("/briefs")
 async def list_briefs(company: str | None = None) -> list[dict]:
     """List saved briefs, optionally filtered by company name."""
+    logger.info("list_briefs_requested", company=company)
     paths = await output_repository.list_briefs(company)
     return [
         {
@@ -174,14 +175,28 @@ async def list_briefs(company: str | None = None) -> list[dict]:
 
 
 @router.get("/briefs/{company}")
-async def get_brief(company: str) -> dict:
-    """Return the most recent brief for a company."""
+async def get_brief(company: str, filename: str | None = None) -> dict:
+    """Return a brief for a company, optionally a specific filename."""
+    logger.info("get_brief_requested", company=company, filename=filename)
     paths = await output_repository.list_briefs(company)
     if not paths:
         raise HTTPException(status_code=404, detail=f"No briefs found for '{company}'")
-    content = await output_repository.read_brief(paths[0])
+
+    selected_path = paths[0]
+    if filename:
+        for p in paths:
+            if p.name == filename:
+                selected_path = p
+                break
+        else:
+            raise HTTPException(
+                status_code=404, detail=f"Brief '{filename}' not found for '{company}'"
+            )
+
+    content = await output_repository.read_brief(selected_path)
     return {
         "company": company,
-        "path": str(paths[0]),
+        "filename": selected_path.name,
+        "path": str(selected_path),
         "content": content,
     }
