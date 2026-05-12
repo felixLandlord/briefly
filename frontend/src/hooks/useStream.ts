@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef, useState, useEffect } from "react";
 
 export type TokenEvent = {
   type: "token";
@@ -29,6 +29,7 @@ export interface UseStreamReturn {
   events: StreamEvent[];
   isLoading: boolean;
   error: string | null;
+  activeAgentNs: string[] | null;
   run: (companies: string[]) => void;
   reset: () => void;
 }
@@ -39,13 +40,48 @@ export function useStream(): UseStreamReturn {
   const [events, setEvents] = useState<StreamEvent[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeAgentNs, setActiveAgentNs] = useState<string[] | null>(null);
+  
   const abortRef = useRef<AbortController | null>(null);
+  const eventBufferRef = useRef<StreamEvent[]>([]);
+  const rafRef = useRef<number | null>(null);
+
+  const flushBuffer = useCallback(() => {
+    if (eventBufferRef.current.length > 0) {
+      const newEvents = [...eventBufferRef.current];
+      eventBufferRef.current = [];
+      
+      setEvents((prev) => [...prev, ...newEvents]);
+      
+      // Update active agent based on the last event with ns
+      for (let i = newEvents.length - 1; i >= 0; i--) {
+        const evt = newEvents[i];
+        if (evt.type === "token" || evt.type === "update") {
+          setActiveAgentNs(evt.ns);
+          break;
+        }
+      }
+    }
+    rafRef.current = requestAnimationFrame(flushBuffer);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
+  }, []);
 
   const reset = useCallback(() => {
     abortRef.current?.abort();
     setEvents([]);
     setError(null);
     setIsLoading(false);
+    setActiveAgentNs(null);
+    eventBufferRef.current = [];
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
   }, []);
 
   const run = useCallback((companies: string[]) => {
@@ -53,6 +89,9 @@ export function useStream(): UseStreamReturn {
     setIsLoading(true);
     const controller = new AbortController();
     abortRef.current = controller;
+    
+    // Start RAF loop
+    rafRef.current = requestAnimationFrame(flushBuffer);
 
     (async () => {
       try {
@@ -76,7 +115,6 @@ export function useStream(): UseStreamReturn {
           if (done) break;
           buffer += decoder.decode(value, { stream: true });
 
-          // Parse SSE frames
           const frames = buffer.split("\n\n");
           buffer = frames.pop() ?? "";
 
@@ -89,13 +127,14 @@ export function useStream(): UseStreamReturn {
             try {
               const parsed = JSON.parse(dataLine.replace(/\\n/g, "\n"));
               const evt: StreamEvent = { type: eventLine as StreamEvent["type"], ...parsed };
-              setEvents((prev) => [...prev, evt]);
+              
+              eventBufferRef.current.push(evt);
 
               if (eventLine === "end" || eventLine === "error") {
-                setIsLoading(false);
+                // Final flush will happen in the loop or after
               }
             } catch {
-              // ignore parse errors on individual frames
+              // ignore parse errors
             }
           }
         }
@@ -103,13 +142,20 @@ export function useStream(): UseStreamReturn {
         if ((err as Error).name !== "AbortError") {
           const msg = err instanceof Error ? err.message : String(err);
           setError(msg);
-          setEvents((prev) => [...prev, { type: "error", error: msg }]);
+          eventBufferRef.current.push({ type: "error", error: msg });
         }
       } finally {
-        setIsLoading(false);
+        // Wait a bit to ensure last events are flushed then stop loading
+        setTimeout(() => {
+          setIsLoading(false);
+          if (rafRef.current) {
+            cancelAnimationFrame(rafRef.current);
+            rafRef.current = null;
+          }
+        }, 100);
       }
     })();
-  }, [reset]);
+  }, [reset, flushBuffer]);
 
-  return { events, isLoading, error, run, reset };
+  return { events, isLoading, error, activeAgentNs, run, reset };
 }
